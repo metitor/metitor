@@ -1,0 +1,289 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Better-Auth tables
+
+model User {
+  id                   String               @id @default(cuid())
+  email                String               @unique
+  name                 String?
+  image                String?
+  emailVerified        Boolean              @default(false)
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  sessions             Session[]
+  accounts             Account[]
+  pluginInstallations  PluginInstallation[]
+  entityPluginConfigs  EntityPluginConfig[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  userId                String
+  accountId             String
+  providerId            String
+  accessToken           String?   @db.Text
+  refreshToken          String?   @db.Text
+  idToken               String?   @db.Text
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+// Core entities
+
+model Object {
+  id                    String         @id @default(cuid())
+  entityType            String         @map("entity_type")
+  name                  String
+  normalizedName        String         @map("normalized_name")
+  permalink             String         @unique
+  categoryCode          String?        @map("category_code")
+  status                String?
+  foundedAt             DateTime?      @map("founded_at")
+  closedAt              DateTime?      @map("closed_at")
+  description           String?        @db.Text
+  homepageUrl           String?        @map("homepage_url")
+  createdAt             DateTime       @default(now()) @map("created_at")
+  updatedAt             DateTime       @updatedAt @map("updated_at")
+  // Relations as company
+  fundingRounds         FundingRound[] @relation("CompanyFundingRounds")
+  acquisitionsAcquired  Acquisition[]  @relation("AcquiredCompany")
+  acquisitionsAcquiring Acquisition[]  @relation("AcquiringCompany")
+  offices               Office[]
+  milestones            Milestone[]
+  ipos                  IPO[]
+  // Relations as investor
+  investments           Investment[]   @relation("InvestorInvestments")
+  // Relations as person
+  degrees               Degree[]
+  relationships         Relationship[] @relation("PersonRelationships")
+  // Relations for relationships
+  relatedTo             Relationship[] @relation("RelatedObject")
+
+  @@index([normalizedName])
+  @@index([permalink])
+  @@index([entityType])
+  @@map("objects")
+}
+
+model FundingRound {
+  id                 String       @id @default(cuid())
+  objectId           String       @map("object_id")
+  roundCode          String?      @map("round_code")
+  raisedAmount       Decimal?     @map("raised_amount") @db.Decimal(20, 2)
+  raisedCurrencyCode String?      @map("raised_currency_code")
+  fundedAt           DateTime?    @map("funded_at")
+  participants       Int?
+  createdAt          DateTime     @default(now()) @map("created_at")
+  updatedAt          DateTime     @updatedAt @map("updated_at")
+  object             Object       @relation("CompanyFundingRounds", fields: [objectId], references: [id], onDelete: Cascade)
+  investments        Investment[]
+
+  @@index([objectId])
+  @@index([fundedAt])
+  @@map("funding_rounds")
+}
+
+model Investment {
+  id               String       @id @default(cuid())
+  fundingRoundId   String       @map("funding_round_id")
+  investorObjectId String       @map("investor_object_id")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+  fundingRound     FundingRound @relation(fields: [fundingRoundId], references: [id], onDelete: Cascade)
+  investor         Object       @relation("InvestorInvestments", fields: [investorObjectId], references: [id], onDelete: Cascade)
+
+  @@index([fundingRoundId])
+  @@index([investorObjectId])
+  @@map("investments")
+}
+
+model Acquisition {
+  id                String    @id @default(cuid())
+  acquiringObjectId String    @map("acquiring_object_id")
+  acquiredObjectId  String    @map("acquired_object_id")
+  priceAmount       Decimal?  @map("price_amount") @db.Decimal(20, 2)
+  priceCurrencyCode String?   @map("price_currency_code")
+  acquiredAt        DateTime? @map("acquired_at")
+  termCode          String?   @map("term_code")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  acquiringObject   Object    @relation("AcquiringCompany", fields: [acquiringObjectId], references: [id], onDelete: Cascade)
+  acquiredObject    Object    @relation("AcquiredCompany", fields: [acquiredObjectId], references: [id], onDelete: Cascade)
+
+  @@index([acquiringObjectId])
+  @@index([acquiredObjectId])
+  @@map("acquisitions")
+}
+
+model Office {
+  id          String   @id @default(cuid())
+  objectId    String   @map("object_id")
+  description String?
+  region      String?
+  address1    String?  @map("address1")
+  address2    String?  @map("address2")
+  city        String?
+  zipCode     String?  @map("zip_code")
+  stateCode   String?  @map("state_code")
+  countryCode String?  @map("country_code")
+  latitude    Decimal? @db.Decimal(10, 8)
+  longitude   Decimal? @db.Decimal(11, 8)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  object      Object   @relation(fields: [objectId], references: [id], onDelete: Cascade)
+
+  @@index([objectId])
+  @@map("offices")
+}
+
+model Milestone {
+  id            String    @id @default(cuid())
+  objectId      String    @map("object_id")
+  milestoneAt   DateTime? @map("milestone_at")
+  milestoneCode String?   @map("milestone_code")
+  description   String?   @db.Text
+  sourceUrl     String?   @map("source_url")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  object        Object    @relation(fields: [objectId], references: [id], onDelete: Cascade)
+
+  @@index([objectId])
+  @@map("milestones")
+}
+
+model IPO {
+  id                    String    @id @default(cuid())
+  objectId              String    @map("object_id")
+  valuationAmount       Decimal?  @map("valuation_amount") @db.Decimal(20, 2)
+  valuationCurrencyCode String?   @map("valuation_currency_code")
+  raisedAmount          Decimal?  @map("raised_amount") @db.Decimal(20, 2)
+  raisedCurrencyCode    String?   @map("raised_currency_code")
+  publicAt              DateTime? @map("public_at")
+  stockSymbol           String?   @map("stock_symbol")
+  sourceUrl             String?   @map("source_url")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+  object                Object    @relation(fields: [objectId], references: [id], onDelete: Cascade)
+
+  @@index([objectId])
+  @@map("ipos")
+}
+
+model Degree {
+  id          String    @id @default(cuid())
+  objectId    String    @map("object_id")
+  degreeType  String?   @map("degree_type")
+  subject     String?
+  institution String?
+  graduatedAt DateTime? @map("graduated_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  object      Object    @relation(fields: [objectId], references: [id], onDelete: Cascade)
+
+  @@index([objectId])
+  @@map("degrees")
+}
+
+model Relationship {
+  id               String    @id @default(cuid())
+  personObjectId   String    @map("person_object_id")
+  relatedObjectId  String    @map("related_object_id")
+  relationshipCode String?   @map("relationship_code")
+  title            String?
+  startAt          DateTime? @map("start_at")
+  endAt            DateTime? @map("end_at")
+  isCurrent        Boolean   @default(false) @map("is_current")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  person           Object    @relation("PersonRelationships", fields: [personObjectId], references: [id], onDelete: Cascade)
+  relatedObject    Object    @relation("RelatedObject", fields: [relatedObjectId], references: [id], onDelete: Cascade)
+
+  @@index([personObjectId])
+  @@index([relatedObjectId])
+  @@map("relationships")
+}
+
+// Plugin Installation - tracks which plugins users have installed
+
+model PluginInstallation {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  pluginId    String   @map("plugin_id")
+  enabled     Boolean  @default(true)
+  settings    Json?    @db.JsonB
+  installedAt DateTime @default(now()) @map("installed_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, pluginId])
+  @@index([userId])
+  @@index([pluginId])
+  @@map("plugin_installations")
+}
+
+// Entity Plugin Config - per-company/investor plugin preferences
+
+model EntityPluginConfig {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  entityType String   @map("entity_type") // "company" or "investor"
+  entityId   String   @map("entity_id")   // permalink of the entity
+  pluginId   String   @map("plugin_id")
+  enabled    Boolean  @default(true)
+  settings   Json?    @db.JsonB
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, entityType, entityId, pluginId])
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@map("entity_plugin_configs")
+}
