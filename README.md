@@ -1,4 +1,4 @@
-# Metior
+# Metitor
 
 An elegant, open-source platform for exploring startup and funding data with a powerful plugin system.
 
